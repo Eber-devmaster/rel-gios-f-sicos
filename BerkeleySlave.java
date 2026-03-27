@@ -7,33 +7,36 @@ public class BerkeleySlave {
 
     public BerkeleySlave(int port) {
         this.port = port;
-        this.currentTime = System.currentTimeMillis();
+        // Simulamos um pequeno desvio inicial para ver o ajuste funcionando
+        this.currentTime = System.currentTimeMillis() + (new java.util.Random().nextInt(200) - 100);
     }
 
     public void start() {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Escravo Berkeley iniciado na porta " + port + " com tempo inicial: " + currentTime);
+            System.out.println("Escravo iniciado na porta " + port + " | Tempo inicial: " + currentTime);
 
             while (true) {
-                Socket masterSocket = serverSocket.accept();
-                DataInputStream in = new DataInputStream(masterSocket.getInputStream());
-                DataOutputStream out = new DataOutputStream(masterSocket.getOutputStream());
+                // PRIMEIRA CONEXÃO: Enviar o tempo para o Mestre
+                try (Socket socket1 = serverSocket.accept();
+                        DataInputStream in = new DataInputStream(socket1.getInputStream());
+                        DataOutputStream out = new DataOutputStream(socket1.getOutputStream())) {
 
-                // Recebe o tempo do mestre (não usado diretamente para cálculo, mas para RTT se necessário)
-                long masterTimeAtMaster = in.readLong();
+                    in.readLong(); // Recebe o tempo do mestre (vazio)
+                    out.writeLong(this.currentTime);
+                    System.out.println("Enviado tempo atual: " + currentTime);
+                }
 
-                // Envia o tempo atual do escravo para o mestre
-                out.writeLong(currentTime);
+                // SEGUNDA CONEXÃO: Receber o ajuste calculado
+                try (Socket socket2 = serverSocket.accept();
+                        DataInputStream in = new DataInputStream(socket2.getInputStream())) {
 
-                // Recebe o ajuste do mestre
-                long adjustment = in.readLong();
-                currentTime += adjustment;
-                System.out.println("Tempo ajustado na porta " + port + ": " + currentTime + " (Ajuste: " + adjustment + " ms)");
-
-                masterSocket.close();
+                    long adjustment = in.readLong();
+                    this.currentTime += adjustment;
+                    System.out.println("Ajuste de " + adjustment + "ms aplicado. Novo tempo: " + currentTime);
+                }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("Erro no escravo: " + e.getMessage());
         }
     }
 
@@ -44,6 +47,6 @@ public class BerkeleySlave {
         }
         int port = Integer.parseInt(args[0]);
         BerkeleySlave slave = new BerkeleySlave(port);
-        slave.start();
+        slave.start(); // Inicia o loop de escuta
     }
 }
