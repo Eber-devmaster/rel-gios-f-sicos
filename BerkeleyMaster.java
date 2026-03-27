@@ -11,73 +11,69 @@ public class BerkeleyMaster {
             System.out.println("Mestre Berkeley iniciado na porta " + MASTER_PORT);
 
             while (true) {
-                System.out.println("\nIniciando ciclo de sincronização...");
-                List<Long> slaveTimes = new ArrayList<>();
+                System.out.println("\n--- Iniciando ciclo de sincronização ---");
+                
                 long masterTime = System.currentTimeMillis();
-                slaveTimes.add(masterTime);
+                Map<Integer, Long> slaveTimesMap = new HashMap<>();
+                long sum = masterTime;
 
+                // 1. Fase de Coleta: Solicita o tempo de cada escravo
                 for (int slavePort : SLAVE_PORTS) {
-                    try (Socket slaveSocket = new Socket("localhost", slavePort);
-                         DataInputStream in = new DataInputStream(slaveSocket.getInputStream());
-                         DataOutputStream out = new DataOutputStream(slaveSocket.getOutputStream())) {
+                    try (Socket socket = new Socket("localhost", slavePort);
+                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                         DataInputStream in = new DataInputStream(socket.getInputStream())) {
 
-                        // Envia o tempo do mestre para o escravo
+                        // Envia tempo do mestre 
                         out.writeLong(masterTime);
-                        // Recebe o tempo do escravo
-                        long slaveTime = in.readLong();
-                        slaveTimes.add(slaveTime);
-                        System.out.println("Tempo recebido do escravo na porta " + slavePort + ": " + slaveTime);
+                        
+                        // Recebe o tempo atual do escravo
+                        long sTime = in.readLong();
+                        slaveTimesMap.put(slavePort, sTime);
+                        sum += sTime;
+                        
+                        System.out.println("Porta " + slavePort + " respondeu: " + sTime);
 
                     } catch (ConnectException e) {
-                        System.err.println("Escravo na porta " + slavePort + " não está ativo. Ignorando.");
+                        System.err.println("Escravo na porta " + slavePort + " offline.");
                     } catch (IOException e) {
-                        System.err.println("Erro de comunicação com escravo na porta " + slavePort + ": " + e.getMessage());
+                        System.err.println("Erro na porta " + slavePort + ": " + e.getMessage());
                     }
                 }
 
-                if (slaveTimes.size() > 1) { // Pelo menos o mestre e um escravo
-                    long averageTime = calculateAverage(slaveTimes);
-                    System.out.println("Tempo médio calculado: " + averageTime);
+                // 2. Fase de Cálculo e Ajuste
+                if (!slaveTimesMap.isEmpty()) {
+                    long averageTime = sum / (slaveTimesMap.size() + 1);
+                    System.out.println("Média calculada: " + averageTime);
 
-                    // Envia ajustes para os escravos
-                    for (int slavePort : SLAVE_PORTS) {
-                        try (Socket slaveSocket = new Socket("localhost", slavePort);
-                             DataOutputStream out = new DataOutputStream(slaveSocket.getOutputStream())) {
+                    for (Map.Entry<Integer, Long> entry : slaveTimesMap.entrySet()) {
+                        int port = entry.getKey();
+                        long slaveTime = entry.getValue();
 
-                            long adjustment = averageTime - masterTime; // Ajuste baseado no tempo do mestre
-                            out.writeLong(adjustment);
-                            System.out.println("Ajuste enviado para escravo na porta " + slavePort + ": " + adjustment + " ms");
+                        try (Socket socket = new Socket("localhost", port);
+                             DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
 
-                        } catch (ConnectException e) {
-                            // Já tratado acima, apenas ignora se o escravo não estiver ativo
+                            //(Média - Tempo Original do Escravo)
+                            long individualAdjustment = averageTime - slaveTime;
+                            out.writeLong(individualAdjustment);
+                            
+                            System.out.println("Ajuste enviado para " + port + ": " + individualAdjustment + "ms");
+
                         } catch (IOException e) {
-                            System.err.println("Erro ao enviar ajuste para escravo na porta " + slavePort + ": " + e.getMessage());
+                            System.err.println("Erro ao enviar ajuste para " + port);
                         }
                     }
+                    
+                    // O mestre também deve se ajustar (logicamente)
+                    long masterAdjustment = averageTime - masterTime;
+                    System.out.println("Auto-ajuste do mestre: " + masterAdjustment + "ms");
                 } else {
-                    System.out.println("Nenhum escravo ativo para sincronizar.");
+                    System.out.println("Nenhum escravo disponível.");
                 }
 
-                try {
-                    Thread.sleep(5000); // Sincroniza a cada 5 segundos
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    System.err.println("Mestre interrompido.");
-                    break;
-                }
+                Thread.sleep(5000); // Intervalo entre ciclos
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private static long calculateAverage(List<Long> times) {
-        // Implementação simples, sem descarte de outliers como mencionado no PDF.
-        // Para uma implementação mais robusta, seria necessário adicionar lógica para outliers.
-        long sum = 0;
-        for (long time : times) {
-            sum += time;
-        }
-        return sum / times.size();
     }
 }
