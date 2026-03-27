@@ -7,8 +7,9 @@ public class BerkeleySlave {
 
     public BerkeleySlave(int port) {
         this.port = port;
+        int salt = (port - 6000) * new java.util.Random().nextInt(9);
         // Simulamos um pequeno desvio inicial para ver o ajuste funcionando
-        this.currentTime = System.currentTimeMillis() + (new java.util.Random().nextInt(200) - 100);
+        this.currentTime = System.currentTimeMillis() + (new java.util.Random().nextInt(200 + salt) - 100);
     }
 
     public void start() {
