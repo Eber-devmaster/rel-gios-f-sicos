@@ -7,6 +7,7 @@ public class BerkeleyMaster {
     private static final List<Integer> SLAVE_PORTS = Arrays.asList(6001, 6002, 6003);
 
     public static void main(String[] args) {
+        boolean isFirst = true;
         try (ServerSocket masterSocket = new ServerSocket(MASTER_PORT)) {
             System.out.println("Mestre Berkeley iniciado na porta " + MASTER_PORT);
 
@@ -66,8 +67,14 @@ public class BerkeleyMaster {
                 } else {
                     System.out.println("[AVISO] Nenhum escravo ativo para sincronizar.");
                 }
+                
+                int timeSleep = isFirst ? 15000 : 1000; // Aguarda 15 segundos para o próximo ciclo se for a primeira execução
 
-                Thread.sleep(1000); // Aguarda 5 segundos para o próximo ciclo
+                if(isFirst){
+                    isFirst = false;
+                }
+                
+                Thread.sleep(timeSleep); 
             }
         } catch (Exception e) {
             e.printStackTrace();
